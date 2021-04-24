@@ -2,16 +2,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 
 
 void defaultError(void) {
-	fprintf(stderr, "Error occurred\n");
+	fprintf(stderr, "An error has occurred\n");
 }
 
 
 // Storing the command into an array of arguments
 char** parseCommand(char* command) {
 	char** arguments;
+	char** tmpArguments;
 	char* tmp;
 	int i = 0;
 	
@@ -26,9 +30,12 @@ char** parseCommand(char* command) {
 		arguments[i] = tmp;
 		
 		// reallocating memory for the array to fit the next argument
-		if ((arguments = realloc(arguments, sizeof(char*) * (i + 1))) == NULL) {
+		if ((tmpArguments = realloc(arguments, sizeof(char*) * (i + 2))) == NULL) {
 			fprintf(stderr, "Memory allocation failed\n");
 			return NULL;
+		}	
+		else {
+			arguments = tmpArguments;
 		}
 		
 		i++;
@@ -42,14 +49,31 @@ char** parseCommand(char* command) {
 // Using execvp to execute the command
 int executeCommand(char* command) {
 	char** arguments;
+	pid_t pid, wpid;
+	int status = 0;
+	
 	if ((arguments = parseCommand(command)) == NULL) {
 		return -1;
 	}
 	
 	// TODO custom commands: exit, path
-	// TODO child process
-	if ((execvp(arguments[0], arguments)) == -1) {
-		defaultError();
+	
+	// Creating a child process to execute the command
+	switch (pid = fork()) {
+		case -1:
+			fprintf(stderr, "Fork failed.");
+			return -1;
+			
+		case 0:; // child process
+			if ((execv(arguments[0], arguments)) == -1) {
+				defaultError();
+			}
+			return 0;
+			break;
+			
+		default: // parent process
+			wait(NULL);
+			break;
 	}
 	free(arguments);
 	return 0;
@@ -66,7 +90,7 @@ char* readCommand(void) {
 		if (command == NULL) {
 			fprintf(stderr, "Error while reading command\n");
 		}
-		else { // TODO Fix crash from 0 length command
+		else { // TODO Fix crash from 0 length command (Maybe fixed?)
 			command[strlen(command) - 1] = '\0';
     	}
 	}
@@ -83,7 +107,9 @@ int main(int argc, char** argv) {
 			while (1) {
 				fprintf(stdout, "wish> ");
 				command = readCommand();
-				executeCommand(command);
+				if (executeCommand(command) == -1){
+					defaultError();
+				}
 				free(command);
 			}
 			break;
